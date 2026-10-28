@@ -15,13 +15,13 @@
 
     MSG_S1      DB 0DH, 0AH, 'Enter string: ', '$'
     MSG_S1_CMP  DB 0DH, 0AH, 'Enter first string: ', '$'
-    MSG_S2_CMP  DB 'Enter second string: ', '$'
+    MSG_S2_CMP  DB 0DH, 0AH, 'Enter second string: ', '$'
     MSG_LEN     DB 'String Length: ', '$'
     MSG_EQ      DB 'Result: Strings are EQUAL', 0DH, 0AH, '$'
     MSG_LT      DB 'Result: First string is LESS than second string (STR1 < STR2)', 0DH, 0AH, '$'
     MSG_GT      DB 'Result: First string is GREATER than second string (STR1 > STR2)', 0DH, 0AH, '$'
     MSG_REV     DB 'Reversed String (in-place): ', '$'
-    MSG_INV     DB 'Invalid choice!', 0DH, 0AH, '$'
+    MSG_INV     DB 0DH, 0AH, 'Invalid choice!', 0DH, 0AH, '$'
     CRLF        DB 0DH, 0AH, '$'
 
 .CODE
@@ -40,16 +40,29 @@ OP_LOOP:
     INT 21H
     MOV CHOICE, AL
 
+    ; ---------------------------------------------------------
+    ; FIX: Restructured Jump Logic for Out of Range Error
+    ; ---------------------------------------------------------
     CMP CHOICE, '4'
-    JE EXIT_PROG
-    CMP CHOICE, '1'
-    JE DO_STRLEN
-    CMP CHOICE, '2'
-    JE DO_STRCMP
-    CMP CHOICE, '3'
-    JE DO_STRREV
+    JNE CHECK_1
+    JMP EXIT_PROG
 
-    ; Invalid choice
+CHECK_1:
+    CMP CHOICE, '1'
+    JNE CHECK_2
+    JMP DO_STRLEN
+
+CHECK_2:
+    CMP CHOICE, '2'
+    JNE CHECK_3
+    JMP DO_STRCMP
+
+CHECK_3:
+    CMP CHOICE, '3'
+    JNE INVALID_CHOICE
+    JMP DO_STRREV
+
+INVALID_CHOICE:
     LEA DX, MSG_INV
     MOV AH, 09H
     INT 21H
@@ -64,16 +77,18 @@ DO_STRLEN:
 
     LEA SI, STR1
     CALL STRLEN
+    PUSH AX
 
     LEA DX, MSG_LEN
     MOV AH, 09H
     INT 21H
+    POP AX
     CALL PRINT_NUM
+    
     LEA DX, CRLF
     MOV AH, 09H
     INT 21H
     JMP OP_LOOP
-
 DO_STRCMP:
     LEA DX, MSG_S1_CMP
     MOV AH, 09H
@@ -247,7 +262,9 @@ REV_DONE:
     RET
 STRREV ENDP
 
+; -------------------------------------------------------------
 ; Reads string from keyboard into buffer at DI, terminates with '$'
+; -------------------------------------------------------------
 READ_STR PROC
     PUSH AX
     PUSH DI
@@ -261,12 +278,21 @@ READ_CHAR_LOOP:
     JMP READ_CHAR_LOOP
 READ_STR_DONE:
     MOV BYTE PTR [DI], '$'
+    
+    ; FIX: Force a Line Feed (0Ah) so the cursor drops to the next line 
+    ; after the user presses Enter (0Dh).
+    MOV AH, 02H
+    MOV DL, 0AH
+    INT 21H
+    
     POP DI
     POP AX
     RET
 READ_STR ENDP
 
+; -------------------------------------------------------------
 ; Prints an unsigned integer in AX to standard output
+; -------------------------------------------------------------
 PRINT_NUM PROC
     PUSH AX
     PUSH BX
